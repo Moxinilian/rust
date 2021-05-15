@@ -1,3 +1,6 @@
+/* global addClass, getNakedUrl, getSettingValue, hasOwnPropertyRustdoc, initSearch, onEach */
+/* global onEachLazy, removeClass, searchState, updateLocalStorage */
+
 (function() {
 // This mapping table should match the discriminants of
 // `rustdoc::html::item_type::ItemType` type in Rust.
@@ -146,23 +149,21 @@ window.initSearch = function(rawSearchIndex) {
 
         removeEmptyStringsFromArray(split);
 
-        function transformResults(results, isType) {
+        function transformResults(results) {
             var out = [];
             for (var i = 0, len = results.length; i < len; ++i) {
                 if (results[i].id > -1) {
                     var obj = searchIndex[results[i].id];
                     obj.lev = results[i].lev;
-                    if (isType !== true || obj.type) {
-                        var res = buildHrefAndPath(obj);
-                        obj.displayPath = pathSplitter(res[0]);
-                        obj.fullPath = obj.displayPath + obj.name;
-                        // To be sure than it some items aren't considered as duplicate.
-                        obj.fullPath += "|" + obj.ty;
-                        obj.href = res[1];
-                        out.push(obj);
-                        if (out.length >= MAX_RESULTS) {
-                            break;
-                        }
+                    var res = buildHrefAndPath(obj);
+                    obj.displayPath = pathSplitter(res[0]);
+                    obj.fullPath = obj.displayPath + obj.name;
+                    // To be sure than it some items aren't considered as duplicate.
+                    obj.fullPath += "|" + obj.ty;
+                    obj.href = res[1];
+                    out.push(obj);
+                    if (out.length >= MAX_RESULTS) {
+                        break;
                     }
                 }
             }
@@ -172,7 +173,7 @@ window.initSearch = function(rawSearchIndex) {
         function sortResults(results, isType) {
             var ar = [];
             for (var entry in results) {
-                if (hasOwnProperty(results, entry)) {
+                if (hasOwnPropertyRustdoc(results, entry)) {
                     ar.push(results[entry]);
                 }
             }
@@ -256,7 +257,7 @@ window.initSearch = function(rawSearchIndex) {
             });
 
             for (i = 0, len = results.length; i < len; ++i) {
-                var result = results[i];
+                result = results[i];
 
                 // this validation does not make sense when searching by types
                 if (result.dontValidate) {
@@ -266,9 +267,7 @@ window.initSearch = function(rawSearchIndex) {
                     path = result.item.path.toLowerCase(),
                     parent = result.item.parent;
 
-                if (isType !== true &&
-                    validateResult(name, path, split, parent) === false)
-                {
+                if (!isType && !validateResult(name, path, split, parent)) {
                     result.id = -1;
                 }
             }
@@ -305,7 +304,7 @@ window.initSearch = function(rawSearchIndex) {
                 if (obj.length > GENERICS_DATA &&
                       obj[GENERICS_DATA].length >= val.generics.length) {
                     var elems = Object.create(null);
-                    var elength = object[GENERICS_DATA].length;
+                    var elength = obj[GENERICS_DATA].length;
                     for (var x = 0; x < elength; ++x) {
                         elems[getObjectNameFromId(obj[GENERICS_DATA][x])] += 1;
                     }
@@ -352,7 +351,7 @@ window.initSearch = function(rawSearchIndex) {
             var lev_distance = MAX_LEV_DISTANCE + 1;
             var len, x, firstGeneric;
             if (obj[NAME] === val.name) {
-                if (literalSearch === true) {
+                if (literalSearch) {
                     if (val.generics && val.generics.length !== 0) {
                         if (obj.length > GENERICS_DATA &&
                               obj[GENERICS_DATA].length >= val.generics.length) {
@@ -373,7 +372,7 @@ window.initSearch = function(rawSearchIndex) {
                                     break;
                                 }
                             }
-                            if (allFound === true) {
+                            if (allFound) {
                                 return true;
                             }
                         } else {
@@ -394,7 +393,7 @@ window.initSearch = function(rawSearchIndex) {
                 }
             }
             // Names didn't match so let's check if one of the generic types could.
-            if (literalSearch === true) {
+            if (literalSearch) {
                  if (obj.length > GENERICS_DATA && obj[GENERICS_DATA].length > 0) {
                     return obj[GENERICS_DATA].some(
                         function(name) {
@@ -429,12 +428,12 @@ window.initSearch = function(rawSearchIndex) {
                 var length = obj.type[INPUTS_DATA].length;
                 for (var i = 0; i < length; i++) {
                     var tmp = obj.type[INPUTS_DATA][i];
-                    if (typePassesFilter(typeFilter, tmp[1]) === false) {
+                    if (!typePassesFilter(typeFilter, tmp[1])) {
                         continue;
                     }
                     tmp = checkType(tmp, val, literalSearch);
-                    if (literalSearch === true) {
-                        if (tmp === true) {
+                    if (literalSearch) {
+                        if (tmp) {
                             return true;
                         }
                         continue;
@@ -445,7 +444,7 @@ window.initSearch = function(rawSearchIndex) {
                     }
                 }
             }
-            return literalSearch === true ? false : lev_distance;
+            return literalSearch ? false : lev_distance;
         }
 
         function checkReturned(obj, val, literalSearch, typeFilter) {
@@ -458,12 +457,12 @@ window.initSearch = function(rawSearchIndex) {
                 }
                 for (var x = 0, len = ret.length; x < len; ++x) {
                     var tmp = ret[x];
-                    if (typePassesFilter(typeFilter, tmp[1]) === false) {
+                    if (!typePassesFilter(typeFilter, tmp[1])) {
                         continue;
                     }
                     tmp = checkType(tmp, val, literalSearch);
-                    if (literalSearch === true) {
-                        if (tmp === true) {
+                    if (literalSearch) {
+                        if (tmp) {
                             return true;
                         }
                         continue;
@@ -474,7 +473,7 @@ window.initSearch = function(rawSearchIndex) {
                     }
                 }
             }
-            return literalSearch === true ? false : lev_distance;
+            return literalSearch ? false : lev_distance;
         }
 
         function checkPath(contains, lastElem, ty) {
@@ -507,7 +506,7 @@ window.initSearch = function(rawSearchIndex) {
                     }
                     lev_total += lev;
                 }
-                if (aborted === false) {
+                if (!aborted) {
                     ret_lev = Math.min(ret_lev, Math.round(lev_total / clength));
                 }
             }
@@ -634,14 +633,14 @@ window.initSearch = function(rawSearchIndex) {
                         dontValidate: true,
                     };
                 }
-                if (in_args === true && results_in_args[fullId] === undefined) {
+                if (in_args && results_in_args[fullId] === undefined) {
                     results_in_args[fullId] = {
                         id: i,
                         index: -1,
                         dontValidate: true,
                     };
                 }
-                if (returned === true && results_returned[fullId] === undefined) {
+                if (returned && results_returned[fullId] === undefined) {
                     results_returned[fullId] = {
                         id: i,
                         index: -1,
@@ -676,7 +675,7 @@ window.initSearch = function(rawSearchIndex) {
                 fullId = ty.id;
 
                 returned = checkReturned(ty, output, true, NO_TYPE_FILTER);
-                if (output.name === "*" || returned === true) {
+                if (output.name === "*" || returned) {
                     in_args = false;
                     var is_module = false;
 
@@ -684,26 +683,26 @@ window.initSearch = function(rawSearchIndex) {
                         is_module = true;
                     } else {
                         var allFound = true;
-                        for (it = 0, len = inputs.length; allFound === true && it < len; it++) {
+                        for (it = 0, len = inputs.length; allFound && it < len; it++) {
                             allFound = checkType(type, inputs[it], true);
                         }
                         in_args = allFound;
                     }
-                    if (in_args === true) {
+                    if (in_args) {
                         results_in_args[fullId] = {
                             id: i,
                             index: -1,
                             dontValidate: true,
                         };
                     }
-                    if (returned === true) {
+                    if (returned) {
                         results_returned[fullId] = {
                             id: i,
                             index: -1,
                             dontValidate: true,
                         };
                     }
-                    if (is_module === true) {
+                    if (is_module) {
                         results[fullId] = {
                             id: i,
                             index: -1,
@@ -721,7 +720,7 @@ window.initSearch = function(rawSearchIndex) {
             query.output = val;
             query.search = val;
             // gather matching search results up to a certain maximum
-            val = val.replace(/\_/g, "");
+            val = val.replace(/_/g, "");
 
             var valGenerics = extractGenerics(val);
 
@@ -763,10 +762,10 @@ window.initSearch = function(rawSearchIndex) {
                     }
                 }
                 if ((lev = levenshtein(searchWords[j], val)) <= MAX_LEV_DISTANCE) {
-                    if (typePassesFilter(typeFilter, ty.ty) === false) {
-                        lev = MAX_LEV_DISTANCE + 1;
-                    } else {
+                    if (typePassesFilter(typeFilter, ty.ty)) {
                         lev += 1;
+                    } else {
+                        lev = MAX_LEV_DISTANCE + 1;
                     }
                 }
                 in_args = findArg(ty, valGenerics, false, typeFilter);
@@ -821,7 +820,7 @@ window.initSearch = function(rawSearchIndex) {
         var ret = {
             "in_args": sortResults(results_in_args, true),
             "returned": sortResults(results_returned, true),
-            "others": sortResults(results),
+            "others": sortResults(results, false),
         };
         handleAliases(ret, query, filterCrates);
         return ret;
@@ -1246,7 +1245,9 @@ window.initSearch = function(rawSearchIndex) {
     function getFilterCrates() {
         var elem = document.getElementById("crate-search");
 
-        if (elem && elem.value !== "All crates" && hasOwnProperty(rawSearchIndex, elem.value)) {
+        if (elem && elem.value !== "All crates" &&
+            hasOwnPropertyRustdoc(rawSearchIndex, elem.value))
+        {
             return elem.value;
         }
         return undefined;
@@ -1263,7 +1264,7 @@ window.initSearch = function(rawSearchIndex) {
         if (query.query.length === 0) {
             return;
         }
-        if (forced !== true && query.id === currentResults) {
+        if (!forced && query.id === currentResults) {
             if (query.query.length > 0) {
                 searchState.putBackSearch(searchState.input);
             }
@@ -1297,14 +1298,13 @@ window.initSearch = function(rawSearchIndex) {
         var id = 0;
 
         for (var crate in rawSearchIndex) {
-            if (!hasOwnProperty(rawSearchIndex, crate)) { continue; }
+            if (!hasOwnPropertyRustdoc(rawSearchIndex, crate)) {
+                continue;
+            }
 
             var crateSize = 0;
 
             searchWords.push(crate);
-            var normalizedName = crate.indexOf("_") === -1
-                ? crate
-                : crate.replace(/_/g, "");
             // This object should have exactly the same set of fields as the "row"
             // object defined below. Your JavaScript runtime will thank you.
             // https://mathiasbynens.be/notes/shapes-ics
@@ -1317,7 +1317,7 @@ window.initSearch = function(rawSearchIndex) {
                 parent: undefined,
                 type: null,
                 id: id,
-                normalizedName: normalizedName,
+                normalizedName: crate.indexOf("_") === -1 ? crate : crate.replace(/_/g, ""),
             };
             id += 1;
             searchIndex.push(crateRow);
@@ -1367,9 +1367,6 @@ window.initSearch = function(rawSearchIndex) {
                     word = "";
                     searchWords.push("");
                 }
-                var normalizedName = word.indexOf("_") === -1
-                    ? word
-                    : word.replace(/_/g, "");
                 var row = {
                     crate: crate,
                     ty: itemTypes[i],
@@ -1379,7 +1376,7 @@ window.initSearch = function(rawSearchIndex) {
                     parent: itemParentIdxs[i] > 0 ? paths[itemParentIdxs[i] - 1] : undefined,
                     type: itemFunctionSearchTypes[i],
                     id: id,
-                    normalizedName: normalizedName,
+                    normalizedName: word.indexOf("_") === -1 ? word : word.replace(/_/g, ""),
                 };
                 id += 1;
                 searchIndex.push(row);
@@ -1391,9 +1388,11 @@ window.initSearch = function(rawSearchIndex) {
                 ALIASES[crate] = {};
                 var j, local_aliases;
                 for (var alias_name in aliases) {
-                    if (!aliases.hasOwnProperty(alias_name)) { continue; }
+                    if (!hasOwnPropertyRustdoc(aliases, alias_name)) {
+                        continue;
+                    }
 
-                    if (!ALIASES[crate].hasOwnProperty(alias_name)) {
+                    if (!hasOwnPropertyRustdoc(ALIASES[crate], alias_name)) {
                         ALIASES[crate][alias_name] = [];
                     }
                     local_aliases = aliases[alias_name];
@@ -1509,7 +1508,7 @@ window.initSearch = function(rawSearchIndex) {
 };
 
 if (window.searchIndex !== undefined) {
-  initSearch(window.searchIndex);
+    initSearch(window.searchIndex);
 }
 
 })();

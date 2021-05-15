@@ -335,10 +335,9 @@ rustc_queries! {
 
     /// Returns coverage summary info for a function, after executing the `InstrumentCoverage`
     /// MIR pass (assuming the -Zinstrument-coverage option is enabled).
-    query coverageinfo(key: DefId) -> mir::CoverageInfo {
-        desc { |tcx| "retrieving coverage info from MIR for `{}`", tcx.def_path_str(key) }
+    query coverageinfo(key: ty::InstanceDef<'tcx>) -> mir::CoverageInfo {
+        desc { |tcx| "retrieving coverage info from MIR for `{}`", tcx.def_path_str(key.def_id()) }
         storage(ArenaCacheSelector<'tcx>)
-        cache_on_disk_if { key.is_local() }
     }
 
     /// Returns the name of the file that contains the function body, if instrumented for coverage.
@@ -605,6 +604,19 @@ rustc_queries! {
         cache_on_disk_if { true }
     }
     query unsafety_check_result_for_const_arg(key: (LocalDefId, DefId)) -> &'tcx mir::UnsafetyCheckResult {
+        desc {
+            |tcx| "unsafety-checking the const argument `{}`",
+            tcx.def_path_str(key.0.to_def_id())
+        }
+    }
+
+    /// Unsafety-check this `LocalDefId` with THIR unsafeck. This should be
+    /// used with `-Zthir-unsafeck`.
+    query thir_check_unsafety(key: LocalDefId) {
+        desc { |tcx| "unsafety-checking `{}`", tcx.def_path_str(key.to_def_id()) }
+        cache_on_disk_if { true }
+    }
+    query thir_check_unsafety_for_const_arg(key: (LocalDefId, DefId)) {
         desc {
             |tcx| "unsafety-checking the const argument `{}`",
             tcx.def_path_str(key.0.to_def_id())
@@ -1022,6 +1034,10 @@ rustc_queries! {
     query needs_drop_raw(env: ty::ParamEnvAnd<'tcx, Ty<'tcx>>) -> bool {
         desc { "computing whether `{}` needs drop", env.value }
     }
+    /// Query backing `TyS::has_significant_drop_raw`.
+    query has_significant_drop_raw(env: ty::ParamEnvAnd<'tcx, Ty<'tcx>>) -> bool {
+        desc { "computing whether `{}` has a significant drop", env.value }
+    }
 
     /// Query backing `TyS::is_structural_eq_shallow`.
     ///
@@ -1040,6 +1056,17 @@ rustc_queries! {
     query adt_drop_tys(def_id: DefId) -> Result<&'tcx ty::List<Ty<'tcx>>, AlwaysRequiresDrop> {
         desc { |tcx| "computing when `{}` needs drop", tcx.def_path_str(def_id) }
         cache_on_disk_if { true }
+    }
+
+    /// A list of types where the ADT requires drop if and only if any of those types
+    /// has significant drop. A type marked with the attribute `rustc_insignificant_dtor`
+    /// is considered to not be significant. A drop is significant if it is implemented
+    /// by the user or does anything that will have any observable behavior (other than
+    /// freeing up memory). If the ADT is known to have a significant destructor then
+    /// `Err(AlwaysRequiresDrop)` is returned.
+    query adt_significant_drop_tys(def_id: DefId) -> Result<&'tcx ty::List<Ty<'tcx>>, AlwaysRequiresDrop> {
+        desc { |tcx| "computing when `{}` has a significant destructor", tcx.def_path_str(def_id) }
+        cache_on_disk_if { false }
     }
 
     query layout_raw(
@@ -1299,6 +1326,10 @@ rustc_queries! {
     query late_bound_vars_map(_: LocalDefId)
         -> Option<&'tcx FxHashMap<ItemLocalId, Vec<ty::BoundVariableKind>>> {
         desc { "looking up late bound vars" }
+    }
+
+    query lifetime_scope_map(_: LocalDefId) -> Option<FxHashMap<ItemLocalId, LifetimeScopeForPath>> {
+        desc { "finds the lifetime scope for an HirId of a PathSegment" }
     }
 
     query visibility(def_id: DefId) -> ty::Visibility {

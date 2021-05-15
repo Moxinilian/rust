@@ -207,6 +207,7 @@ pub(super) fn write_shared(
     }
     write_toolchain("brush.svg", static_files::BRUSH_SVG)?;
     write_toolchain("wheel.svg", static_files::WHEEL_SVG)?;
+    write_toolchain("clipboard.svg", static_files::CLIPBOARD_SVG)?;
     write_toolchain("down-arrow.svg", static_files::DOWN_ARROW_SVG)?;
 
     let mut themes: Vec<&String> = themes.iter().collect();
@@ -464,8 +465,6 @@ pub(super) fn write_shared(
     // Update the list of all implementors for traits
     let dst = cx.dst.join("implementors");
     for (&did, imps) in &cx.cache.implementors {
-        let did = did.expect_real();
-
         // Private modules can leak through to this phase of rustdoc, which
         // could contain implementations for otherwise private types. In some
         // rare cases we could find an implementation for an item which wasn't

@@ -69,7 +69,6 @@ pub mod llvm {
 }
 
 mod llvm_util;
-mod metadata;
 mod mono_item;
 mod type_;
 mod type_of;
@@ -251,16 +250,11 @@ impl CodegenBackend for LlvmCodegenBackend {
     }
 
     fn metadata_loader(&self) -> Box<MetadataLoaderDyn> {
-        Box::new(metadata::LlvmMetadataLoader)
+        Box::new(rustc_codegen_ssa::back::metadata::DefaultMetadataLoader)
     }
 
-    fn provide(&self, providers: &mut ty::query::Providers) {
-        attributes::provide_both(providers);
-    }
-
-    fn provide_extern(&self, providers: &mut ty::query::Providers) {
-        attributes::provide_both(providers);
-    }
+    fn provide(&self, _providers: &mut ty::query::Providers) {}
+    fn provide_extern(&self, _providers: &mut ty::query::Providers) {}
 
     fn codegen_crate<'tcx>(
         &self,
@@ -271,6 +265,7 @@ impl CodegenBackend for LlvmCodegenBackend {
         Box::new(rustc_codegen_ssa::base::codegen_crate(
             LlvmCodegenBackend(()),
             tcx,
+            crate::llvm_util::target_cpu(tcx.sess).to_string(),
             metadata,
             need_metadata_module,
         ))
@@ -306,13 +301,11 @@ impl CodegenBackend for LlvmCodegenBackend {
 
         // Run the linker on any artifacts that resulted from the LLVM run.
         // This should produce either a finished executable or library.
-        let target_cpu = crate::llvm_util::target_cpu(sess);
         link_binary::<LlvmArchiveBuilder<'_>>(
             sess,
             &codegen_results,
             outputs,
             &codegen_results.crate_name.as_str(),
-            target_cpu,
         );
 
         Ok(())

@@ -73,10 +73,6 @@ impl FakeDefId {
         Self::Fake(DefIndex::from(id), krate)
     }
 
-    crate fn new_real(id: DefId) -> Self {
-        Self::Real(id)
-    }
-
     #[inline]
     crate fn is_local(self) -> bool {
         match self {
@@ -164,7 +160,7 @@ impl ExternalCrate {
 
     crate fn src_root(&self, tcx: TyCtxt<'_>) -> PathBuf {
         match self.src(tcx) {
-            FileName::Real(ref p) => match p.local_path().parent() {
+            FileName::Real(ref p) => match p.local_path_if_available().parent() {
                 Some(p) => p.to_path_buf(),
                 None => PathBuf::new(),
             },
@@ -470,7 +466,7 @@ impl Item {
             .filter_map(|ItemLink { link: s, link_text, did, ref fragment }| {
                 match did {
                     Some(did) => {
-                        if let Some((mut href, ..)) = href(did.expect_real(), cx) {
+                        if let Some((mut href, ..)) = href(did.clone(), cx) {
                             if let Some(ref fragment) = *fragment {
                                 href.push('#');
                                 href.push_str(fragment);
@@ -972,7 +968,7 @@ crate struct ItemLink {
     /// This may not be the same as `link` if there was a disambiguator
     /// in an intra-doc link (e.g. \[`fn@f`\])
     pub(crate) link_text: String,
-    pub(crate) did: Option<FakeDefId>,
+    pub(crate) did: Option<DefId>,
     /// The url fragment to append to the link
     pub(crate) fragment: Option<String>,
 }
@@ -1606,7 +1602,6 @@ impl Type {
                 }
             }
             RawPointer(..) => Some(PrimitiveType::RawPointer),
-            BorrowedRef { type_: box Generic(..), .. } => Some(PrimitiveType::Reference),
             BareFunction(..) => Some(PrimitiveType::Fn),
             Never => Some(PrimitiveType::Never),
             _ => None,
@@ -1665,13 +1660,7 @@ impl Type {
     }
 
     crate fn is_primitive(&self) -> bool {
-        match self {
-            Self::Primitive(_) => true,
-            Self::BorrowedRef { ref type_, .. } | Self::RawPointer(_, ref type_) => {
-                type_.is_primitive()
-            }
-            _ => false,
-        }
+        self.primitive_type().is_some()
     }
 
     crate fn projection(&self) -> Option<(&Type, DefId, Symbol)> {
@@ -2242,7 +2231,7 @@ crate struct Impl {
     crate items: Vec<Item>,
     crate negative_polarity: bool,
     crate synthetic: bool,
-    crate blanket_impl: Option<Type>,
+    crate blanket_impl: Option<Box<Type>>,
 }
 
 impl Impl {

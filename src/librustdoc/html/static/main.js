@@ -1,6 +1,6 @@
 // Local js definitions:
-/* global addClass, getSettingValue, hasClass */
-/* global onEach, onEachLazy, hasOwnProperty, removeClass, updateLocalStorage */
+/* global addClass, getSettingValue, hasClass, searchState */
+/* global onEach, onEachLazy, removeClass */
 /* global switchTheme, useSystemTheme */
 
 if (!String.prototype.startsWith) {
@@ -156,152 +156,154 @@ function hideThemeButtonState() {
     "use strict";
 
     window.searchState = {
-      loadingText: "Loading search results...",
-      input: document.getElementsByClassName("search-input")[0],
-      outputElement: function() {
-        return document.getElementById("search");
-      },
-      title: null,
-      titleBeforeSearch: document.title,
-      timeout: null,
-      // On the search screen, so you remain on the last tab you opened.
-      //
-      // 0 for "In Names"
-      // 1 for "In Parameters"
-      // 2 for "In Return Types"
-      currentTab: 0,
-      mouseMovedAfterSearch: true,
-      clearInputTimeout: function() {
-        if (searchState.timeout !== null) {
-            clearTimeout(searchState.timeout);
-            searchState.timeout = null;
-        }
-      },
-      // Sets the focus on the search bar at the top of the page
-      focus: function() {
-          searchState.input.focus();
-      },
-      // Removes the focus from the search bar.
-      defocus: function() {
-          searchState.input.blur();
-      },
-      showResults: function(search) {
-        if (search === null || typeof search === 'undefined') {
-            search = searchState.outputElement();
-        }
-        addClass(main, "hidden");
-        removeClass(search, "hidden");
-        searchState.mouseMovedAfterSearch = false;
-        document.title = searchState.title;
-      },
-      hideResults: function(search) {
-        if (search === null || typeof search === 'undefined') {
-            search = searchState.outputElement();
-        }
-        addClass(search, "hidden");
-        removeClass(main, "hidden");
-        document.title = searchState.titleBeforeSearch;
-        // We also remove the query parameter from the URL.
-        if (searchState.browserSupportsHistoryApi()) {
-            history.replaceState("", window.currentCrate + " - Rust",
-                getNakedUrl() + window.location.hash);
-        }
-      },
-      getQueryStringParams: function() {
-        var params = {};
-        window.location.search.substring(1).split("&").
-            map(function(s) {
-                var pair = s.split("=");
-                params[decodeURIComponent(pair[0])] =
-                    typeof pair[1] === "undefined" ? null : decodeURIComponent(pair[1]);
-            });
-        return params;
-      },
-      putBackSearch: function(search_input) {
-        var search = searchState.outputElement();
-        if (search_input.value !== "" && hasClass(search, "hidden")) {
-            searchState.showResults(search);
-            if (searchState.browserSupportsHistoryApi()) {
-                var extra = "?search=" + encodeURIComponent(search_input.value);
-                history.replaceState(search_input.value, "",
-                    getNakedUrl() + extra + window.location.hash);
+        loadingText: "Loading search results...",
+        input: document.getElementsByClassName("search-input")[0],
+        outputElement: function() {
+            return document.getElementById("search");
+        },
+        title: null,
+        titleBeforeSearch: document.title,
+        timeout: null,
+        // On the search screen, so you remain on the last tab you opened.
+        //
+        // 0 for "In Names"
+        // 1 for "In Parameters"
+        // 2 for "In Return Types"
+        currentTab: 0,
+        mouseMovedAfterSearch: true,
+        clearInputTimeout: function() {
+            if (searchState.timeout !== null) {
+                clearTimeout(searchState.timeout);
+                searchState.timeout = null;
             }
+        },
+        // Sets the focus on the search bar at the top of the page
+        focus: function() {
+            searchState.input.focus();
+        },
+        // Removes the focus from the search bar.
+        defocus: function() {
+            searchState.input.blur();
+        },
+        showResults: function(search) {
+            if (search === null || typeof search === 'undefined') {
+                search = searchState.outputElement();
+            }
+            addClass(main, "hidden");
+            removeClass(search, "hidden");
+            searchState.mouseMovedAfterSearch = false;
             document.title = searchState.title;
-        }
-      },
-      browserSupportsHistoryApi: function() {
-          return window.history && typeof window.history.pushState === "function";
-      },
-      setup: function() {
-        var search_input = searchState.input;
-        if (!searchState.input) {
-            return;
-        }
-        function loadScript(url) {
-            var script = document.createElement('script');
-            script.src = url;
-            document.head.append(script);
-        }
-
-        var searchLoaded = false;
-        function loadSearch() {
-            if (!searchLoaded) {
-                searchLoaded = true;
-                loadScript(window.searchJS);
-                loadScript(window.searchIndexJS);
+        },
+        hideResults: function(search) {
+            if (search === null || typeof search === 'undefined') {
+                search = searchState.outputElement();
             }
-        }
-
-        search_input.addEventListener("focus", function() {
-            searchState.putBackSearch(this);
-            search_input.origPlaceholder = searchState.input.placeholder;
-            search_input.placeholder = "Type your search here.";
-            loadSearch();
-        });
-        search_input.addEventListener("blur", function() {
-            search_input.placeholder = searchState.input.origPlaceholder;
-        });
-
-        document.addEventListener("mousemove", function() {
-          searchState.mouseMovedAfterSearch = true;
-        });
-
-        search_input.removeAttribute('disabled');
-
-        // `crates{version}.js` should always be loaded before this script, so we can use it safely.
-        searchState.addCrateDropdown(window.ALL_CRATES);
-        var params = searchState.getQueryStringParams();
-        if (params.search !== undefined) {
+            addClass(search, "hidden");
+            removeClass(main, "hidden");
+            document.title = searchState.titleBeforeSearch;
+            // We also remove the query parameter from the URL.
+            if (searchState.browserSupportsHistoryApi()) {
+                history.replaceState("", window.currentCrate + " - Rust",
+                    getNakedUrl() + window.location.hash);
+            }
+        },
+        getQueryStringParams: function() {
+            var params = {};
+            window.location.search.substring(1).split("&").
+                map(function(s) {
+                    var pair = s.split("=");
+                    params[decodeURIComponent(pair[0])] =
+                        typeof pair[1] === "undefined" ? null : decodeURIComponent(pair[1]);
+                });
+            return params;
+        },
+        putBackSearch: function(search_input) {
             var search = searchState.outputElement();
-            search.innerHTML = "<h3 style=\"text-align: center;\">" +
-               searchState.loadingText + "</h3>";
-            searchState.showResults(search);
-            loadSearch();
-        }
-      },
-      addCrateDropdown: function(crates) {
-        var elem = document.getElementById("crate-search");
-
-        if (!elem) {
-            return;
-        }
-        var savedCrate = getSettingValue("saved-filter-crate");
-        for (var i = 0, len = crates.length; i < len; ++i) {
-            var option = document.createElement("option");
-            option.value = crates[i];
-            option.innerText = crates[i];
-            elem.appendChild(option);
-            // Set the crate filter from saved storage, if the current page has the saved crate
-            // filter.
-            //
-            // If not, ignore the crate filter -- we want to support filtering for crates on sites
-            // like doc.rust-lang.org where the crates may differ from page to page while on the
-            // same domain.
-            if (crates[i] === savedCrate) {
-                elem.value = savedCrate;
+            if (search_input.value !== "" && hasClass(search, "hidden")) {
+                searchState.showResults(search);
+                if (searchState.browserSupportsHistoryApi()) {
+                    var extra = "?search=" + encodeURIComponent(search_input.value);
+                    history.replaceState(search_input.value, "",
+                        getNakedUrl() + extra + window.location.hash);
+                }
+                document.title = searchState.title;
             }
-        }
-      },
+        },
+        browserSupportsHistoryApi: function() {
+            return window.history && typeof window.history.pushState === "function";
+        },
+        setup: function() {
+            var search_input = searchState.input;
+            if (!searchState.input) {
+                return;
+            }
+            function loadScript(url) {
+                var script = document.createElement('script');
+                script.src = url;
+                document.head.append(script);
+            }
+
+            var searchLoaded = false;
+            function loadSearch() {
+                if (!searchLoaded) {
+                    searchLoaded = true;
+                    loadScript(window.searchJS);
+                    loadScript(window.searchIndexJS);
+                }
+            }
+
+            search_input.addEventListener("focus", function() {
+                searchState.putBackSearch(this);
+                search_input.origPlaceholder = searchState.input.placeholder;
+                search_input.placeholder = "Type your search here.";
+                loadSearch();
+            });
+            search_input.addEventListener("blur", function() {
+                search_input.placeholder = searchState.input.origPlaceholder;
+            });
+
+            document.addEventListener("mousemove", function() {
+                searchState.mouseMovedAfterSearch = true;
+            });
+
+            search_input.removeAttribute('disabled');
+
+            // `crates{version}.js` should always be loaded before this script, so we can use it
+            // safely.
+            searchState.addCrateDropdown(window.ALL_CRATES);
+            var params = searchState.getQueryStringParams();
+            if (params.search !== undefined) {
+                var search = searchState.outputElement();
+                search.innerHTML = "<h3 style=\"text-align: center;\">" +
+                   searchState.loadingText + "</h3>";
+                searchState.showResults(search);
+                loadSearch();
+            }
+        },
+        addCrateDropdown: function(crates) {
+            var elem = document.getElementById("crate-search");
+
+            if (!elem) {
+                return;
+            }
+            var savedCrate = getSettingValue("saved-filter-crate");
+            for (var i = 0, len = crates.length; i < len; ++i) {
+                var option = document.createElement("option");
+                option.value = crates[i];
+                option.innerText = crates[i];
+                elem.appendChild(option);
+                // Set the crate filter from saved storage, if the current page has the saved crate
+                // filter.
+                //
+                // If not, ignore the crate filter -- we want to support filtering for crates on
+                // sites like doc.rust-lang.org where the crates may differ from page to page while
+                // on the
+                // same domain.
+                if (crates[i] === savedCrate) {
+                    elem.value = savedCrate;
+                }
+            }
+        },
     };
 
     function getPageId() {
@@ -345,10 +347,6 @@ function hideThemeButtonState() {
         document.getElementsByTagName("body")[0].style.marginTop = "";
     }
 
-    function isHidden(elem) {
-        return elem.offsetHeight === 0;
-    }
-
     var toggleAllDocsId = "toggle-all-docs";
     var main = document.getElementById("main");
     var savedHash = "";
@@ -381,56 +379,9 @@ function hideThemeButtonState() {
         }
     }
 
-    function highlightSourceLines(match, ev) {
-        if (typeof match === "undefined") {
-            // If we're in mobile mode, we should hide the sidebar in any case.
-            hideSidebar();
-            match = window.location.hash.match(/^#?(\d+)(?:-(\d+))?$/);
-        }
-        if (!match) {
-            return;
-        }
-        var from = parseInt(match[1], 10);
-        var to = from;
-        if (typeof match[2] !== "undefined") {
-            to = parseInt(match[2], 10);
-        }
-        if (to < from) {
-            var tmp = to;
-            to = from;
-            from = tmp;
-        }
-        var elem = document.getElementById(from);
-        if (!elem) {
-            return;
-        }
-        if (!ev) {
-            var x = document.getElementById(from);
-            if (x) {
-                x.scrollIntoView();
-            }
-        }
-        onEachLazy(document.getElementsByClassName("line-numbers"), function(e) {
-            onEachLazy(e.getElementsByTagName("span"), function(i_e) {
-                removeClass(i_e, "line-highlighted");
-            });
-        });
-        for (var i = from; i <= to; ++i) {
-            elem = document.getElementById(i);
-            if (!elem) {
-                break;
-            }
-            addClass(elem, "line-highlighted");
-        }
-    }
-
     function onHashChange(ev) {
         // If we're in mobile mode, we should hide the sidebar in any case.
         hideSidebar();
-        var match = window.location.hash.match(/^#?(\d+)(?:-(\d+))?$/);
-        if (match) {
-            return highlightSourceLines(match, ev);
-        }
         handleHashes(ev);
     }
 
@@ -448,14 +399,14 @@ function hideThemeButtonState() {
     }
 
     function getHelpElement(build) {
-        if (build !== false) {
+        if (build) {
             buildHelperPopup();
         }
         return document.getElementById("help");
     }
 
     function displayHelp(display, ev, help) {
-        if (display === true) {
+        if (display) {
             help = help ? help : getHelpElement(true);
             if (hasClass(help, "hidden")) {
                 ev.preventDefault();
@@ -466,7 +417,7 @@ function hideThemeButtonState() {
             // No need to build the help popup if we want to hide it in case it hasn't been
             // built yet...
             help = help ? help : getHelpElement(false);
-            if (help && hasClass(help, "hidden") === false) {
+            if (help && !hasClass(help, "hidden")) {
                 ev.preventDefault();
                 addClass(help, "hidden");
                 removeClass(document.body, "blur");
@@ -477,9 +428,9 @@ function hideThemeButtonState() {
     function handleEscape(ev) {
         var help = getHelpElement(false);
         var search = searchState.outputElement();
-        if (hasClass(help, "hidden") === false) {
+        if (!hasClass(help, "hidden")) {
             displayHelp(false, ev, help);
-        } else if (hasClass(search, "hidden") === false) {
+        } else if (!hasClass(search, "hidden")) {
             searchState.clearInputTimeout();
             ev.preventDefault();
             searchState.hideResults(search);
@@ -491,7 +442,7 @@ function hideThemeButtonState() {
     var disableShortcuts = getSettingValue("disable-shortcuts") === "true";
     function handleShortcut(ev) {
         // Don't interfere with browser shortcuts
-        if (ev.ctrlKey || ev.altKey || ev.metaKey || disableShortcuts === true) {
+        if (ev.ctrlKey || ev.altKey || ev.metaKey || disableShortcuts) {
             return;
         }
 
@@ -585,77 +536,8 @@ function hideThemeButtonState() {
         }
     }
 
-    function findParentElement(elem, tagName) {
-        do {
-            if (elem && elem.tagName === tagName) {
-                return elem;
-            }
-            elem = elem.parentNode;
-        } while (elem);
-        return null;
-    }
-
     document.addEventListener("keypress", handleShortcut);
     document.addEventListener("keydown", handleShortcut);
-
-    var handleSourceHighlight = (function() {
-        var prev_line_id = 0;
-
-        var set_fragment = function(name) {
-            var x = window.scrollX,
-                y = window.scrollY;
-            if (searchState.browserSupportsHistoryApi()) {
-                history.replaceState(null, null, "#" + name);
-                highlightSourceLines();
-            } else {
-                location.replace("#" + name);
-            }
-            // Prevent jumps when selecting one or many lines
-            window.scrollTo(x, y);
-        };
-
-        return function(ev) {
-            var cur_line_id = parseInt(ev.target.id, 10);
-            ev.preventDefault();
-
-            if (ev.shiftKey && prev_line_id) {
-                // Swap selection if needed
-                if (prev_line_id > cur_line_id) {
-                    var tmp = prev_line_id;
-                    prev_line_id = cur_line_id;
-                    cur_line_id = tmp;
-                }
-
-                set_fragment(prev_line_id + "-" + cur_line_id);
-            } else {
-                prev_line_id = cur_line_id;
-
-                set_fragment(cur_line_id);
-            }
-        };
-    }());
-
-    document.addEventListener("click", function(ev) {
-        var helpElem = getHelpElement(false);
-        if (hasClass(ev.target, "help-button")) {
-            displayHelp(true, ev);
-        } else if (ev.target.tagName === "SPAN" && hasClass(ev.target.parentNode, "line-numbers")) {
-            handleSourceHighlight(ev);
-        } else if (helpElem && hasClass(helpElem, "hidden") === false) {
-            var is_inside_help_popup = ev.target !== helpElem && helpElem.contains(ev.target);
-            if (is_inside_help_popup === false) {
-                addClass(helpElem, "hidden");
-                removeClass(document.body, "blur");
-            }
-        } else {
-            // Making a collapsed element visible on onhashchange seems
-            // too late
-            var a = findParentElement(ev.target, "A");
-            if (a && a.hash) {
-                expandSection(a.hash.replace(/^#/, ""));
-            }
-        }
-    });
 
     (function() {
         var x = document.getElementsByClassName("version-selector");
@@ -667,7 +549,7 @@ function hideThemeButtonState() {
                     len = window.rootPath.match(/\.\.\//g).length + 1;
 
                 for (i = 0; i < len; ++i) {
-                    match = url.match(/\/[^\/]*$/);
+                    match = url.match(/\/[^/]*$/);
                     if (i < len - 1) {
                         stripped = match[0] + stripped;
                     }
@@ -908,11 +790,11 @@ function hideThemeButtonState() {
         function implHider(addOrRemove, fullHide) {
             return function(n) {
                 var shouldHide =
-                    fullHide === true ||
-                    hasClass(n, "method") === true ||
-                    hasClass(n, "associatedconstant") === true;
-                if (shouldHide === true || hasClass(n, "type") === true) {
-                    if (shouldHide === true) {
+                    fullHide ||
+                    hasClass(n, "method") ||
+                    hasClass(n, "associatedconstant");
+                if (shouldHide || hasClass(n, "type")) {
+                    if (shouldHide) {
                         if (addOrRemove) {
                             addClass(n, "hidden-by-impl-hider");
                         } else {
@@ -934,7 +816,7 @@ function hideThemeButtonState() {
 
         var relatedDoc;
         var action = mode;
-        if (hasClass(toggle.parentNode, "impl") === false) {
+        if (!hasClass(toggle.parentNode, "impl")) {
             relatedDoc = toggle.parentNode.nextElementSibling;
             if (hasClass(relatedDoc, "item-info")) {
                 relatedDoc = relatedDoc.nextElementSibling;
@@ -964,11 +846,11 @@ function hideThemeButtonState() {
             relatedDoc = parentElem;
             var docblock = relatedDoc.nextElementSibling;
 
-            while (hasClass(relatedDoc, "impl-items") === false) {
+            while (!hasClass(relatedDoc, "impl-items")) {
                 relatedDoc = relatedDoc.nextElementSibling;
             }
 
-            if (!relatedDoc && hasClass(docblock, "docblock") === false) {
+            if (!relatedDoc && !hasClass(docblock, "docblock")) {
                 return;
             }
 
@@ -987,7 +869,7 @@ function hideThemeButtonState() {
             if (action === "show") {
                 removeClass(relatedDoc, "fns-now-collapsed");
                 // Stability/deprecation/portability information is never hidden.
-                if (hasClass(docblock, "item-info") === false) {
+                if (!hasClass(docblock, "item-info")) {
                     removeClass(docblock, "hidden-by-usual-hider");
                 }
                 onEachLazy(toggle.childNodes, adjustToggle(false, dontApplyBlockRule));
@@ -996,7 +878,7 @@ function hideThemeButtonState() {
                 addClass(relatedDoc, "fns-now-collapsed");
                 // Stability/deprecation/portability information should be shown even when detailed
                 // info is hidden.
-                if (hasClass(docblock, "item-info") === false) {
+                if (!hasClass(docblock, "item-info")) {
                     addClass(docblock, "hidden-by-usual-hider");
                 }
                 onEachLazy(toggle.childNodes, adjustToggle(true, dontApplyBlockRule));
@@ -1045,7 +927,7 @@ function hideThemeButtonState() {
             });
         }
 
-        if (hideMethodDocs === true) {
+        if (hideMethodDocs) {
             onEachLazy(document.getElementsByClassName("method"), function(e) {
                 var toggle = e.parentNode;
                 if (toggle) {
@@ -1066,13 +948,11 @@ function hideThemeButtonState() {
         });
 
         var currentType = document.getElementsByClassName("type-decl")[0];
-        var className = null;
         if (currentType) {
             currentType = currentType.getElementsByClassName("rust")[0];
             if (currentType) {
                 onEachLazy(currentType.classList, function(item) {
                     if (item !== "main") {
-                        className = item;
                         return true;
                     }
                 });
@@ -1121,6 +1001,27 @@ function hideThemeButtonState() {
         });
     }());
 
+    function handleClick(id, f) {
+        var elem = document.getElementById(id);
+        if (elem) {
+            elem.addEventListener("click", f);
+        }
+    }
+    handleClick("help-button", function(ev) {
+        displayHelp(true, ev);
+    });
+
+    onEachLazy(document.getElementsByTagName("a"), function(el) {
+        // For clicks on internal links (<A> tags with a hash property), we expand the section we're
+        // jumping to *before* jumping there. We can't do this in onHashChange, because it changes
+        // the height of the document so we wind up scrolled to the wrong place.
+        if (el.hash) {
+            el.addEventListener("click", function() {
+                expandSection(el.hash.slice(1));
+            });
+        }
+    });
+
     onEachLazy(document.getElementsByClassName("notable-traits"), function(e) {
         e.onclick = function() {
             this.getElementsByClassName('notable-traits-tooltiptext')[0]
@@ -1132,7 +1033,7 @@ function hideThemeButtonState() {
     if (sidebar_menu) {
         sidebar_menu.onclick = function() {
             var sidebar = document.getElementsByClassName("sidebar")[0];
-            if (hasClass(sidebar, "mobile") === true) {
+            if (hasClass(sidebar, "mobile")) {
                 hideSidebar();
             } else {
                 showSidebar();
@@ -1140,30 +1041,17 @@ function hideThemeButtonState() {
         };
     }
 
-    if (main) {
-        onEachLazy(main.getElementsByClassName("loading-content"), function(e) {
-            e.remove();
-        });
-        onEachLazy(main.childNodes, function(e) {
-            // Unhide the actual content once loading is complete. Headers get
-            // flex treatment for their horizontal layout, divs get block treatment
-            // for vertical layout (column-oriented flex layout for divs caused
-            // errors in mobile browsers).
-            if (e.tagName === "H2" || e.tagName === "H3") {
-                var nextTagName = e.nextElementSibling.tagName;
-                if (nextTagName === "H2" || nextTagName === "H3") {
-                    e.nextElementSibling.style.display = "flex";
-                } else if (nextTagName !== "DETAILS") {
-                    e.nextElementSibling.style.display = "block";
-                }
-            }
-        });
-    }
-
-    function buildHelperPopup() {
+    var buildHelperPopup = function() {
         var popup = document.createElement("aside");
         addClass(popup, "hidden");
         popup.id = "help";
+
+        popup.addEventListener("click", function(ev) {
+            if (ev.target === popup) {
+                // Clicked the blurred zone outside the help popup; dismiss help.
+                displayHelp(false, ev);
+            }
+        });
 
         var book_info = document.createElement("span");
         book_info.innerHTML = "You can find more information in \
@@ -1220,10 +1108,10 @@ function hideThemeButtonState() {
         insertAfter(popup, searchState.outputElement());
         // So that it's only built once and then it'll do nothing when called!
         buildHelperPopup = function() {};
-    }
+    };
 
     onHashChange(null);
-    window.onhashchange = onHashChange;
+    window.addEventListener("hashchange", onHashChange);
     searchState.setup();
 }());
 
@@ -1252,15 +1140,31 @@ function hideThemeButtonState() {
         document.execCommand('copy');
         document.body.removeChild(el);
 
-        but.textContent = '✓';
+        // There is always one children, but multiple childNodes.
+        but.children[0].style.display = 'none';
+
+        var tmp;
+        if (but.childNodes.length < 2) {
+            tmp = document.createTextNode('✓');
+            but.appendChild(tmp);
+        } else {
+            onEachLazy(but.childNodes, function(e) {
+                if (e.nodeType === Node.TEXT_NODE) {
+                    tmp = e;
+                    return true;
+                }
+            });
+            tmp.textContent = '✓';
+        }
 
         if (reset_button_timeout !== null) {
             window.clearTimeout(reset_button_timeout);
         }
 
         function reset_button() {
-            but.textContent = '⎘';
+            tmp.textContent = '';
             reset_button_timeout = null;
+            but.children[0].style.display = "";
         }
 
         reset_button_timeout = window.setTimeout(reset_button, 1000);
