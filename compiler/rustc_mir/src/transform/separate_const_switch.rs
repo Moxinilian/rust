@@ -6,20 +6,22 @@ use smallvec::SmallVec;
 pub struct SeparateConstSwitch;
 
 impl<'tcx> MirPass<'tcx> for SeparateConstSwitch {
-    fn run_pass(&self, tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
-        separate_const_switch(tcx, body);
+    fn run_pass(&self, _tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+        separate_const_switch(body);
     }
 }
 
-pub fn separate_const_switch<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
+pub fn separate_const_switch<'tcx>(body: &mut Body<'tcx>) {
     let mut new_edges: SmallVec<[(BasicBlock, BasicBlock); 8]> = SmallVec::new();
     let predecessors = body.predecessors();
     'block_iter: for (block_id, block) in body.basic_blocks().iter_enumerated() {
+        info!("analyzing {:?}", block_id);
         if let TerminatorKind::SwitchInt {
             discr: Operand::Copy(switch_place) | Operand::Move(switch_place),
             ..
         } = block.terminator().kind
         {
+            info!("found one, switch on {:?}", switch_place);
             // if the block has fewer than 2 predecessors, ignore it
             // we could maybe chain blocks that have exactly one
             // predecessor, but for now we ignore that
@@ -27,9 +29,12 @@ pub fn separate_const_switch<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
                 continue 'block_iter;
             }
 
+            info!("promising");
+
             // first, let's find a non-const place
             // that determines the result of the switch
             if let Some(switch_place) = find_determining_place(switch_place, block) {
+                info!("very promising, thought {:?}", switch_place);
                 // we now have an input place for which it would
                 // be interesting if predecessors assigned it from a const
                 'predec_iter: for predecessor_id in predecessors[block_id].iter().copied() {
@@ -96,8 +101,9 @@ pub fn separate_const_switch<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
                             }
                         }
                     }
-
-                        if is_likely_const(switch_place, block) {
+                    info!("super promising! final place: {:?}", switch_place);
+                        if is_likely_const(switch_place, predecessor) {
+                            info!("yep, found {:?} to {:?}", predecessor_id, block_id);
                             new_edges.push((predecessor_id, block_id));
                         }
                     }
@@ -107,25 +113,58 @@ pub fn separate_const_switch<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
     }
 
     let blocks = body.basic_blocks_mut();
+    if new_edges.len() > 0 {
+        info!("found some! {}", new_edges.len());
+    }
     for (pred_id, target_id) in new_edges {
         if let Some(new_block) = blocks.get(target_id).cloned() {
             let new_block_id = blocks.push(new_block);
             if let Some(terminator) = blocks.get_mut(pred_id).map(|x| x.terminator_mut()) {
                 match terminator.kind {
-                    TerminatorKind::Goto { ref mut target } => if *target == target_id { *target = new_block_id },
-                    TerminatorKind::SwitchInt { ref mut targets, .. } => {
-                        targets.all_targets_mut()
-                               .iter_mut()
-                               .for_each(|x| if *x == target_id { *x = new_block_id });
+                    TerminatorKind::Goto { ref mut target } => {
+                        if *target == target_id {
+                            *target = new_block_id
+                        }
                     }
-                    TerminatorKind::FalseEdge { ref mut real_target, .. } => if *real_target == target_id { *real_target = new_block_id },
-                    TerminatorKind::Call { ref mut destination, .. } => if let Some((_, target)) = destination {
-                        if *target == target_id { *target = new_block_id }
-                    },
-                    TerminatorKind::Assert { ref mut target, .. } => if *target == target_id { *target = new_block_id },
-                    TerminatorKind::DropAndReplace { ref mut target, .. } => if *target == target_id { *target = new_block_id },
-                    TerminatorKind::Drop { ref mut target, .. } => if *target == target_id { *target = new_block_id },
-                    TerminatorKind::FalseUnwind { ref mut real_target, .. } => if *real_target == target_id { *real_target = new_block_id },
+                    TerminatorKind::SwitchInt { ref mut targets, .. } => {
+                        targets.all_targets_mut().iter_mut().for_each(|x| {
+                            if *x == target_id {
+                                *x = new_block_id
+                            }
+                        });
+                    }
+                    TerminatorKind::FalseEdge { ref mut real_target, .. } => {
+                        if *real_target == target_id {
+                            *real_target = new_block_id
+                        }
+                    }
+                    TerminatorKind::Call { ref mut destination, .. } => {
+                        if let Some((_, target)) = destination {
+                            if *target == target_id {
+                                *target = new_block_id
+                            }
+                        }
+                    }
+                    TerminatorKind::Assert { ref mut target, .. } => {
+                        if *target == target_id {
+                            *target = new_block_id
+                        }
+                    }
+                    TerminatorKind::DropAndReplace { ref mut target, .. } => {
+                        if *target == target_id {
+                            *target = new_block_id
+                        }
+                    }
+                    TerminatorKind::Drop { ref mut target, .. } => {
+                        if *target == target_id {
+                            *target = new_block_id
+                        }
+                    }
+                    TerminatorKind::FalseUnwind { ref mut real_target, .. } => {
+                        if *real_target == target_id {
+                            *real_target = new_block_id
+                        }
+                    }
                     TerminatorKind::Resume
                     | TerminatorKind::Abort
                     | TerminatorKind::Return
@@ -145,6 +184,7 @@ pub fn separate_const_switch<'tcx>(_tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>) {
 /// not handled by `separate_const_switch`.
 fn is_likely_const<'tcx>(mut tracked_place: Place<'tcx>, block: &BasicBlockData<'tcx>) -> bool {
     for statement in block.statements.iter().rev() {
+        info!("likely const: {:?}, current track: {:?}", statement, tracked_place);
         match &statement.kind {
             StatementKind::Assign(assign) => {
                 if assign.0 == tracked_place {
@@ -175,6 +215,7 @@ fn is_likely_const<'tcx>(mut tracked_place: Place<'tcx>, block: &BasicBlockData<
                 }
             }
             StatementKind::SetDiscriminant { place, .. } => {
+                info!("found setdisc, with place {:?}, wanted {:?}", place, tracked_place);
                 if **place == tracked_place {
                     return true;
                 }
@@ -200,6 +241,7 @@ fn find_determining_place<'tcx>(
 ) -> Option<Place<'tcx>> {
     let mut tracking_only_discriminant = false;
     for statement in block.statements.iter().rev() {
+        info!("Going through {:?}", statement);
         match &statement.kind {
             StatementKind::Assign(op) => {
                 if op.0 != switch_place || tracking_only_discriminant {
